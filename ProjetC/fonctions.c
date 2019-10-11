@@ -1,7 +1,28 @@
 #include "librairies.h"
 #include "fonctions.h"
+#include "vehicules.h"
 #include "menu.h"
 #include "affichage_carte.h"
+#include "launchers.h"
+
+//PERMET DE RECUPERER UNE ENTREE LORS DE L'EXECUTION
+char key_pressed()
+{
+	struct termios oldterm, newterm;
+	int oldfd; char c, result = 0;
+	tcgetattr (STDIN_FILENO, &oldterm);
+	newterm = oldterm; newterm.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr (STDIN_FILENO, TCSANOW, &newterm);
+	oldfd = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl (STDIN_FILENO, F_SETFL, oldfd | O_NONBLOCK);
+	c = getchar();
+	tcsetattr (STDIN_FILENO,TCSANOW,&oldterm);
+	fcntl (STDIN_FILENO, F_SETFL, oldfd);
+	if(c != EOF){
+		ungetc(c,stdin); result = getchar();
+	}
+	return result;
+}
 
 //PERMET D'ALLOUER DE L'ESPACE MÉMOIRE À UNE MATRICE DE DIMENSION NB_L PAR NB_C
 int **INIT_MAT(int nb_lignes, int nb_colonnes){
@@ -61,6 +82,51 @@ void CHARGEMENT_MAP(int nb_lignes, int nb_colonnes, char **mat){
 	fclose(fic);
 }
 
+void CHARGEMENT_MAP_DANGER(int nb_lignes, int nb_colonnes, char **mat){
+	int nbl,nbc;	
+	FILE* fic = NULL;
+	fic=fopen("map_danger.txt", "r");
+	for(nbl=0;nbl<nb_lignes;nbl++){
+		
+			fgets(mat[nbl], nb_colonnes, fic);
+
+	}
+	fclose(fic);
+}
+
+void CHARGEMENT_Carte_Perm(int nb_lignes, int nb_colonnes, char **mat){
+	int nbl,nbc;	
+	FILE* fic = NULL;
+	fic=fopen("CartePerm.txt", "r");
+	for(nbl=0;nbl<nb_lignes;nbl++){
+		
+			fgets(mat[nbl], nb_colonnes, fic);
+
+	}
+	fclose(fic);
+}
+
+void CHARGEMENT_Carte_Perm_Danger(int nb_lignes, int nb_colonnes, char **mat){
+	int nbl,nbc;	
+	FILE* fic = NULL;
+	fic=fopen("CartePerm_Danger.txt", "r");
+	for(nbl=0;nbl<nb_lignes;nbl++){
+		
+			fgets(mat[nbl], nb_colonnes, fic);
+
+	}
+	fclose(fic);
+}
+
+void REMPLISSAGE_MAT_V(int nb_lignes, int nb_colonnes, char **mat){
+	int nbl,nbc;	
+	for(nbl=0;nbl<nb_lignes;nbl++){
+		for(nbc=0;nbc<nb_colonnes;nbc++){
+			mat[nbl][nbc]=' ';
+		}
+	}
+}
+
 //PERMET D'AFFICHER UNE MATRICE DE DIMENSION NB_L PAR NB_C
 void AFFICHAGE_MAT(int NB_L,int NB_C, int **MAT){
 	int nbl,nbc;
@@ -100,42 +166,135 @@ void AFFICHAGE_ROUTE(int NB_L,int NB_C, int **MAT){
 	}
 }
 
-void AFF_LISTE(Liste_V liste_v){
-	VOITURE* tmp = liste_v;
-	while(tmp != NULL)
-	{
-		printf("%d \n",tmp->posx);
-		tmp = tmp->NXT;
+
+
+FEU* INIT_FEU(int posx, int posy, int x, int y, char color, char **MAT){
+	FEU* F = malloc(sizeof(FEU));
+	F->posx=posx;
+	F->posy=posy;
+	F->couleur=color;
+	F->x=x;
+	F->y=y;
+	if(color=='g'){
+		F->bloc='a';
+	}
+	else if(color=='r'){
+		F->bloc='b';
+	}
+}
+
+Liste_F INSERTION_F(Liste_F liste_f, int posx, int posy, int x, int y, char color,char **MAT){
+	/* Création du nouvel élément */
+	FEU *new = malloc(sizeof(*new));
+	new = INIT_FEU(posx, posy, x, y, color,MAT);
+	/* On assigne l'adresse de l'element suivant au nouveau */
+	new->NXT = liste_f;
+
+	return new;
+} 
+
+void feu(int c, Liste_F liste_f, char **MAT){
+	FEU *tmp=liste_f;
+	/*les feus du bloc a deviennent verts et ceux du bloc b deviennent rouges*/
+	if(c%200 >= 0 && c%200 < 85){
+		while(tmp != NULL){
+			if(tmp->bloc == 'a'){
+				tmp->couleur = 'g';
+				MAT[tmp->y-1][tmp->x-1]=' ';
+				couleur_ex("38","46");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				
+				printf("\33[54;1H\n");
+				tmp=tmp->NXT;
+			}
+			else if(tmp->bloc == 'b'){
+				tmp->couleur = 'r';
+				MAT[tmp->y-1][tmp->x-1]='V';
+				couleur_ex("38","196");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				
+				printf("\33[54;1H\n");
+				tmp=tmp->NXT;
+			}
+		}
+	}
+	/*ROUGE INETERMEDIAIRE (pour synchronisation)*/
+	else if(c%200 >= 85 && c%200 < 100){
+		while(tmp != NULL){
+				tmp->couleur = 'r';
+				MAT[tmp->y-1][tmp->x-1]='V';
+				couleur_ex("38","196");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				tmp=tmp->NXT;
+		}
+	}
+	/*les feux du bloc a deviennent rouges et ceux du bloc b deviennent verts*/
+	else if(c%200 >= 100 && c%200 < 185){
+		while(tmp != NULL){
+			if(tmp->bloc == 'a'){
+				tmp->couleur = 'r';
+				MAT[tmp->y-1][tmp->x-1]='V';
+				couleur_ex("38","196");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				
+				printf("\33[54;1H\n");
+				tmp=tmp->NXT;
+			}
+			else if(tmp->bloc == 'b'){
+				tmp->couleur = 'g';
+				MAT[tmp->y-1][tmp->x-1]=' ';
+				couleur_ex("38","46");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				
+				printf("\33[54;1H\n");
+				tmp=tmp->NXT;
+			}
+		}
+	}
+	else if(c%200 >= 185 && c%200 < 200){
+		while(tmp != NULL){
+				tmp->couleur = 'r';
+				MAT[tmp->y-1][tmp->x-1]='V';
+				couleur("31");
+				printf("\33[%d;%dH🚦\n",tmp->posy,tmp->posx);
+				couleur("0");
+				
+				printf("\33[54;1H\n");
+				tmp=tmp->NXT;
+		}
 	}
 }
 
 
-/*
-//FONCTION DE DEPLACEMENT DE VÉHICULE
-void DEPLACEMENT_VOITURE(int **mat, VOITURE *V, char direc){
-	switch(direc){
-		case 'E': V->posx +=1;break;
-		case 'O': V->posx -=1;break;
-		case 'N': V->posy +=1;break;
-		case 'S': V->posy -=1;break;
-		default : ;break;
-	}
+Liste_F Formation_feu(char **MAT){
+	Liste_F liste_f = NULL;
+	liste_f = INSERTION_F(liste_f,85,30,83,30,'g',MAT);
+	liste_f = INSERTION_F(liste_f,77,24,79,24,'g',MAT);
+	liste_f = INSERTION_F(liste_f,86,25,86,26,'r',MAT);
+	liste_f = INSERTION_F(liste_f,76,29,75,28,'r',MAT);
+	
+	liste_f = INSERTION_F(liste_f,85,15,83,15,'g',MAT);
+	liste_f = INSERTION_F(liste_f,77,3,79,3,'g',MAT);
+	liste_f = INSERTION_F(liste_f,86,4,86,5,'r',MAT);
+	liste_f = INSERTION_F(liste_f,75,8,75,7,'r',MAT);
+	
+	liste_f = INSERTION_F(liste_f,124,32,126,32,'g',MAT);
+	liste_f = INSERTION_F(liste_f,132,38,130,38,'g',MAT);
+	liste_f = INSERTION_F(liste_f,133,33,133,34,'r',MAT);
+	
+	liste_f = INSERTION_F(liste_f,153,32,155,32,'r',MAT);
+	liste_f = INSERTION_F(liste_f,161,38,159,38,'r',MAT);
+	liste_f = INSERTION_F(liste_f,152,37,151,36,'g',MAT);
+	
+	
+	return liste_f;
 }
-*/
 
-/*
-//FONCTION INITIALISATION DE LA LISTE DE VEHICULES
-Liste_V INITIALISATION_V(){
-	Liste_V *liste_v = malloc(sizeof(*liste));
-	VOITURE *voiture = malloc(sizeof(*voiture));
-
-	voiture->nombre = 0;
-	voiture->NXT = NULL;
-	liste->premier = voiture;
-
-	return liste_v;
-}
-*/
 
 /*Fonction de delai*/
 void wait(int wtime){
@@ -147,348 +306,191 @@ void wait(int wtime){
 }
 
 
-int empty(Liste_V liste_v){
-	if(liste_v == NULL) return 1;
-	else return 0;
-}
+void refresh(int c, Liste_V liste_v, Liste_T liste_t, Liste_P liste_p, VOITURE *tmp, TRAIN *tmp_t, PIETON *tmp_p) {
+	animation_eau(c);
 
-VOITURE* INIT_V(){
-	VOITURE* V = malloc(sizeof(VOITURE));
-	int r = rand()%5; /*marque et vitesse*/
-	int p = rand()%8; /*position de départ*/
-	switch(r){ /*initialisation de la marque et de la vitesse MAX*/
-		case 0 : strcpy(V->marque, "Ferrari"); V->vitesse=2; break;
-		case 1 : strcpy(V->marque, "Bugatti"); V->vitesse=2; break;
-		case 2 : strcpy(V->marque, "Mini"); V->vitesse=1; break;
-		case 3 : strcpy(V->marque, "Transit"); V->vitesse=1; break;
-		case 4 : strcpy(V->marque, "Renault"); V->vitesse=1; break;
-		default : break;
-	}
-	switch(p){ /*initialisation des positions de départ*/
-		case 0 : V->posx = 1;   V->posy = 7; V->depart='o'; break; /*Haut gauche*/
-		case 1 : V->posx = 79;  V->posy = 1; V->depart='n'; break; /*Haut centre*/
-		case 2 : V->posx = 205; V->posy = 5; V->depart='e'; break; /*Haut droit*/
-		case 3 : V->posx = 1;   V->posy = 28;V->depart='o'; break; /*Milieu gauche*/
-		case 4 : V->posx = 205; V->posy = 26;V->depart='e'; break; /*Milieu droite*/
-		case 5 : V->posx = 83;  V->posy = 53;V->depart='s'; break; /*Bas gauche*/
-		case 6 : V->posx = 130; V->posy = 53;V->depart='s'; break; /*Bas centre*/
-		case 7 : V->posx = 159; V->posy = 53;V->depart='s'; break; /*Bas droite*/
-		default : break;
-	}
-	V->lm='n'; /*last move inconnu*/
-	V->etat='a'; /*etat actif*/
-return V;
-}
-
-Liste_V INSERTION_V(Liste_V liste_v){ //en tete
-	/* Création du nouvel élément */
-	VOITURE *new = malloc(sizeof(*new));
-	new = INIT_V();
-	/* On assigne l'adresse de l'element suivant au nouveau */
-	new->NXT = liste_v;
-
-	return new;
-}
-
-int content(Liste_V liste_v){
-	VOITURE *tmp = liste_v;
-	int nb=0;
-	while(tmp != NULL){
-		nb += 1;
-		tmp = tmp->NXT;
-	}
-return nb;
-}
-
-
-void SUPPRESSION_V(Liste_V liste_v){
-	VOITURE *tmp = liste_v;
-	VOITURE *find = NULL;
-	VOITURE *replace = NULL;
-	VOITURE *save = NULL;
-	while(tmp != NULL)
-	{
-		if(tmp->etat == 'i'){
-			find=tmp;
-			replace=tmp->NXT;
-			tmp=tmp->NXT;
-		}
-		else tmp = tmp->NXT;
-	}
-	tmp=liste_v;
-	if(find != NULL){
-		while(tmp->NXT != find){tmp=tmp->NXT;}
-		save = tmp->NXT; /*je fais un swap pour pouvoir free l'elt inactif*/
-		tmp->NXT=replace; /*L'elt qui pointait sur l'elt inactif pointe maintenant sur le suivant*/
-		tmp=save;
-		free(tmp);
-	}
-}
-
-
-void carrefour(VOITURE* tmp, char **MAT){
-	int cpt=0; /*compteur de directionsd'un carrefour*/
-	int choice;
-	/*On compte le nombre de direction possible*/
-
-    /*droite*/
-	if(MAT[tmp->posy-1][tmp->posx]=='r' && tmp->lm != 'g' && tmp->lc != 'g') 
-		cpt += 1;
-	if(MAT[tmp->posy-1][tmp->posx]=='D' && tmp->lm == 'd' && tmp->lc != 'g')
-		cpt +=1;
-
-    /*gauche*/
-	if(MAT[tmp->posy-1][tmp->posx-2]=='r' && tmp->lm != 'd' && tmp->lc != 'd')
-		cpt += 2;
-	if(MAT[tmp->posy-1][tmp->posx-2]=='G' && tmp->lm == 'g' && tmp->lc != 'd')
-		cpt += 2;
-
-    /*bas*/
-	if(MAT[tmp->posy][tmp->posx-1]=='r' && tmp->lm != 'h' && tmp->lc != 'h') 
-		cpt += 4;
-	if(MAT[tmp->posy][tmp->posx-1]=='E' && tmp->lm != 'h') 
-		cpt += 4;
-	if(MAT[tmp->posy][tmp->posx-1]=='G' && tmp->lm == 'b' && tmp->lc != 'h') 
-		cpt += 4;
-	if(MAT[tmp->posy][tmp->posx-1]=='D' && (tmp->lm == 'b' || tmp->lm == 'd') && tmp->lc != 'h') 
-		cpt += 4;
-
-    /*haut*/
-	if(MAT[tmp->posy-2][tmp->posx-1]=='r' && tmp->lm != 'b' && tmp->lc != 'b') 
-		cpt += 8;
-	if(MAT[tmp->posy-2][tmp->posx-1]=='H' && tmp->lm == 'h' && tmp->lc != 'b')
-		cpt += 8;
-	if(MAT[tmp->posy-2][tmp->posx-1]=='D' && (tmp->lm == 'h' || tmp->lm == 'd') && tmp->lc != 'b')
-		cpt += 8;
-	if(MAT[tmp->posy-2][tmp->posx-1]=='G' && (tmp->lm == 'h' || tmp->lm == 'g') && tmp->lc != 'b')
-		cpt += 8;
-	
-	/*on choisit la direction à prendre en fonction du carrefour*/
-	switch(cpt){
-	case 1: tmp->posx += 1; /*juste le droit d'aller à droite*/
-		tmp->lc = tmp->lm;
-		tmp->lm = 'd';
-	break;
-	case 2: tmp->posx -= 1; /*juste le droite d'aller à gauche*/
-		tmp->lc = tmp->lm;
-		tmp->lm = 'g';
-	break;
-	case 4: tmp->posy += 1; /*juste le droit de descendre*/
-		tmp->lc = tmp->lm;
-		tmp->lm = 'b';
-	break;
-	case 5: if((choice=rand()%2)==1){
-			tmp->posx += 1; /*va à droite*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'd';
-		}
-		else if(choice%2==0){
-			tmp->posy += 1; /*va à bas*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'b';
-		}
-	break;
-	case 6: if((choice=rand()%2)==1){
-			tmp->posx -= 1; /*va en gauche*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'g';
-		}
-		else if(choice%2==0){
-			tmp->posy += 1; /*va en bas*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'b'; 
-		}
-	break;
-	case 7: if((choice=rand()%3)==1){
-			tmp->posx -= 1; /*va en gauche*/ 		
-			tmp->lc = tmp->lm;
-			tmp->lm = 'g';
-		}
-		else if(choice%3==2){
-			tmp->posx += 1; /*va en droite*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'd';
-		}
-		else if(choice%3==0){
-			tmp->posy += 1; /*va en bas*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'b'; 
-		} 
-	break;
-	case 8: tmp->posy -= 1; /*juste le droit de monter*/
-		tmp->lc = tmp->lm;
-		tmp->lm = 'h';
-	break;
-	case 9: if((choice=rand()%2)==1){
-			tmp->posx += 1; /*va à droite*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'd';
-		}
-		else if(choice%2==0){
-			tmp->posy -= 1; /*va à haut*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h';
-		}
-	break;
-	case 10: if((choice=rand()%2)==1){
-			tmp->posx -= 1; /*va en gauche*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'g';
-		}
-		else if(choice%2==0){
-			tmp->posy -= 1; /*va en haut*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h'; 
-		}
-	break;
-	case 11: if((choice=rand()%3)==1){
-			tmp->posx -= 1; /*va en gauche*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'g';
-		}
-		else if(choice%3==2){
-			tmp->posx += 1; /*va en droite*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'd';
-		}
-		else if(choice%3==0){
-			tmp->posy -= 1; /*va en haut*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h'; 
-		} 
-	break;
-	case 12: if((choice=rand()%2)==1){
-			tmp->posy += 1; /*va en bas*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'b';
-		}
-		else if(choice%2==2){
-			tmp->posy -= 1; /*va en haut*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h';
-		}
-	break;
-	case 13: if((choice=rand()%3)==1){
-			tmp->posy += 1; /*va en bas*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'b';
-		}
-		else if(choice%3==2){
-			tmp->posx += 1; /*va en droite*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'd';
-		}
-		else if(choice%3==0){
-			tmp->posy -= 1; /*va en haut*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h';
-		}
-	break;
-	case 14: if((choice=rand()%3)==1){
-			tmp->posx -= 1; /*va en gauche*/ 
-			tmp->lc = tmp->lm;
-			tmp->lm = 'g';
-		}
-		else if(choice%3==2){
-			tmp->posy += 1; /*va en bas*/
-			tmp->lc = tmp->lm; 
-			tmp->lm = 'b';
-		}
-		else if(choice%3==0){
-			tmp->posy -= 1; /*va en haut*/
-			tmp->lc = tmp->lm;
-			tmp->lm = 'h'; 
-		}
-	break;
-	default : printf("booom et le compteur vaut %d \n",cpt); 
-	}
-
-}
-
-void deplacement_voiture(Liste_V liste_v, VOITURE *tmp, char **MAT){
-	int choice;
-	while(tmp != NULL){
-		if((tmp->posx != 155 || tmp->posy != 53) && (tmp->posx != 79 || tmp->posy != 53) && (tmp->posx != 126 || tmp->posy != 53) && (tmp->posx != 1 || tmp->posy != 26) && (tmp->posx != 204 || tmp->posy != 28) && (tmp->posx != 83 || tmp->posy != 1) && (tmp->posx != 204 || tmp->posy != 7) && (tmp->posx != 1 || tmp->posy != 5))
-		{
-			if(tmp-> depart == 's' && tmp->lm == 'n'){ /*va en HAUT (pour commencer un départ du SUD)*/
-				tmp->posy -= 1;
-				tmp->lm = 'h';
-			}
-			else if(tmp->depart == 'n' && tmp->lm == 'n'){
-				tmp->posy += 1;
-				tmp->lm = 'b';
-			}
-			else if(tmp->depart == 'e' && tmp->lm == 'n'){
-				tmp->posx -= 1;
-				tmp->lm = 'g';
-			}
-			else if(tmp->depart == 'o' && tmp->lm == 'n'){
-				tmp->posx += 1;
-				tmp->lm = 'd';
-			}
-////////////////////////////////
-			else if(MAT[tmp->posy-1][tmp->posx-1] == 'c'){ /*lorsqu'on arrive à un carrefour*/
-				carrefour(tmp, MAT); //test de la fonction carrefour
-			}
-////////////////////////////////
-			else if(HOK && tmp->lm != 'b'){ /*monte*/
-				tmp->posy -= 1;
-				tmp->lm = 'h';
-			}
-			else if(DOK && tmp->lm != 'g'){ /*droite*/
-				tmp->posx += 1;
-				tmp->lm = 'd'; 
-			}
-			else if(GOK && tmp->lm != 'd'){ /*gauche*/
-				tmp->posx -= 1;
-				tmp->lm = 'g';
-			}
-			else if(BOK && tmp->lm != 'h'){ /*bas*/
-				tmp->posy += 1;
-				tmp->lm = 'b';
-			}
-////////////////////////////////
-			else printf("WTF?!");
-				/*finir les déplacements*/
-			tmp=tmp->NXT; /*passe à l'élément suivant de la liste*/
-		}
-		else
-		{	
-			tmp->etat = 'i'; /*état inactif*/
-			tmp=tmp->NXT; /*passe à l'élément suivant de la liste*/
-		}
-	}
-}
-
-void refresh(int c, Liste_V liste_v, VOITURE *tmp, char **MAT){
-//	animation_eau(c);
-	//deplacement_tram(c);
-	while(tmp != NULL)
+	while(tmp != NULL) //VOITURE
 	{	
-		if(tmp->etat != 'i'){
+		if(tmp->etat != 'i' && tmp->etat != 'r' && tmp->etat != 'x'){
 			couleur("40");
-			couleur("33");
-			printf("\33[%d;%dH🚖 \n", tmp->posy, tmp->posx);
-			couleur("0");
-			printf("\33[53;1H\n");
-			//MAT[tmp->posy-1][tmp->posx-1]='v';
+			if(strcmp(tmp->marque,"Renault")==0){
+				couleur("38;5;118");/////////////////////////////////////////////////////////////////////
+				printf("\33[%d;%dHV\n", tmp->posy, tmp->posx);
+				couleur("0");
+			}
+			else if(strcmp(tmp->marque,"Mini")==0){
+				couleur("38;5;33");
+				printf("\33[%d;%dHV\n", tmp->posy, tmp->posx);
+				couleur("0");
+			}
+			else if(strcmp(tmp->marque,"Ferrari")==0){
+				couleur("38;5;196");
+				printf("\33[%d;%dHV\n", tmp->posy, tmp->posx);
+				couleur("0");
+			}
+			else if(strcmp(tmp->marque,"Transit")==0){
+				couleur("38;5;202");
+				printf("\33[%d;%dHV\n", tmp->posy, tmp->posx);
+				couleur("0");
+			}
+			else {
+				couleur("38;5;226");
+				printf("\33[%d;%dHV\n", tmp->posy, tmp->posx);
+				couleur("0");
+			}
+			
+			printf("\33[54;1H\n");
 			tmp = tmp->NXT;
+		}
+		else if(tmp->etat == 'r'){
+			//incrémente une variable à chaque tour pour le temps que le voiture fasse l'essence
+			tmp=tmp->NXT;
 		}
 		else tmp = tmp->NXT; /*passe à l'élément suivant de la liste*/
 	}
-	wait(4);
-//	animation_eau(c);
-	//effacement_tram(c);
+
+	while(tmp_p != NULL) {
+		if(tmp_p->etat != 'i' && tmp_p->etat != 'o') {
+			if(tmp_p->posy == 16 && tmp_p->posx < 88 && tmp_p->posx > 73 && (tmp_p->lm == 'g' || tmp_p->lm == 'd')) 
+				{ }
+			else	
+				printf("\33[%d;%dHP\n", tmp_p->posy, tmp_p->posx);
+		}
+		
+
+		printf("\33[54;1H\n");
+		tmp_p=tmp_p->NXT;
+	}
+
+	
+	while(tmp_t != NULL)  //TRAIN  
+	{
+		couleur("38;5;61");
+/////////////////////////////////////////      gestion train o->e
+
+		if(tmp_t->direction == 'e' && tmp_t->posx == 1)
+			printf("\33[%d;%dHT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 2)
+			printf("\33[%d;%dHTT\n",tmp_t->posy,tmp_t->posx-1);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 3)
+			printf("\33[%d;%dHTTT\n",tmp_t->posy,tmp_t->posx-2);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 4)
+			printf("\33[%d;%dHTTTT\n",tmp_t->posy,tmp_t->posx-3);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 5)
+			printf("\33[%d;%dHTTTTT\n",tmp_t->posy,tmp_t->posx-4);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 6)
+			printf("\33[%d;%dHTTTTTT\n",tmp_t->posy,tmp_t->posx-5);
+		else if(tmp_t->direction == 'e' && tmp_t->posx > 6 && tmp_t->posx < 198)
+			printf("\33[%d;%dHTTTTTTT\n",tmp_t->posy,tmp_t->posx-6);
+			
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 197)
+			printf("\33[%d;%dHTTTTTTT\n",tmp_t->posy,tmp_t->posx-6);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 198)
+			printf("\33[%d;%dHTTTTTT\n",tmp_t->posy,tmp_t->posx-5);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 199)
+			printf("\33[%d;%dHTTTTT\n",tmp_t->posy,tmp_t->posx-4);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 200)
+			printf("\33[%d;%dHTTTT\n",tmp_t->posy,tmp_t->posx-3);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 201)
+			printf("\33[%d;%dHTTT\n",tmp_t->posy,tmp_t->posx-2);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 202)
+			printf("\33[%d;%dHTT\n",tmp_t->posy,tmp_t->posx-1);
+		else if(tmp_t->direction == 'e' && tmp_t->posx == 203)
+			printf("\33[%d;%dHT\n",tmp_t->posy,tmp_t->posx);
+			
+//////////////////////////////////////////		gestion train e->o
+					
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 203)
+			printf("\33[%d;%dHT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 202)
+			printf("\33[%d;%dHTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 201)
+			printf("\33[%d;%dHTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 200)
+			printf("\33[%d;%dHTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 199)
+			printf("\33[%d;%dHTTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 198)
+			printf("\33[%d;%dHTTTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx < 199 && tmp_t->posx > 6)
+			printf("\33[%d;%dHTTTTTTT\n",tmp_t->posy,tmp_t->posx);
+
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 7)
+			printf("\33[%d;%dHTTTTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 6)
+			printf("\33[%d;%dHTTTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 5)
+			printf("\33[%d;%dHTTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 4)
+			printf("\33[%d;%dHTTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 3)
+			printf("\33[%d;%dHTTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 2)
+			printf("\33[%d;%dHTT\n",tmp_t->posy,tmp_t->posx);
+		else if(tmp_t->direction == 'o' && tmp_t->posx == 1)
+			printf("\33[%d;%dHT\n",tmp_t->posy,tmp_t->posx);	
+		
+		couleur("0");
+		printf("\33[54;1H\n");
+		tmp_t=tmp_t->NXT;
+			
+	}
+	
+	wait(5);
+	
+	animation_eau(c);
+
 	tmp=liste_v; /*reinitialisation de tmp*/
 	while(tmp != NULL)
-	{
-		couleur("40");
-		printf("\33[%d;%dH  \n", tmp->posy, tmp->posx);
-		couleur("0");
-		printf("\33[53;1H\n");
+	{	
+		if(tmp->etat != 'r') {
+			couleur("40");
+			printf("\33[%d;%dH  \n", tmp->posy, tmp->posx);
+			couleur("0");
+		}
+		
+		printf("\33[54;1H\n");
+		
 		tmp = tmp->NXT; /*passe à l'élément suivant de la liste*/
 	}
+
+	
+	tmp_p=liste_p;
+	while(tmp_p != NULL) {
+		if(tmp_p->etat == 'a') {
+			if(tmp_p->posy == 16 && tmp_p->posx < 88 && tmp_p->posx > 73 && (tmp_p->lm == 'g' || tmp_p->lm == 'd')) 
+				{ }
+			else if(tmp_p->lm == 'h' || tmp_p->lm == 'b' || tmp_p->posy == 16)
+				printf("\33[%d;%dH \n", tmp_p->posy, tmp_p->posx);
+			else if(tmp_p->posy == 4 || tmp_p->posy == 25 || tmp_p->posy == 29 || tmp_p->posy == 33 || tmp_p->posy == 37 || tmp_p->posy == 46)
+				printf("\33[%d;%dH─\n", tmp_p->posy, tmp_p->posx);
+			else
+				printf("\33[%d;%dH \n", tmp_p->posy, tmp_p->posx);
+		}
+		else if(tmp_p->etat == 'm') { }
+
+		printf("\33[54;1H\n");
+		tmp_p=tmp_p->NXT;
+	}
+	
+
+	tmp_t=liste_t;
+	while(tmp_t != NULL)
+	{
+		if(tmp_t->direction == 'o' && tmp_t->posx > 0 && tmp_t->posx < 198)
+			printf("\33[%d;%dH────────\n", tmp_t->posy, tmp_t->posx);
+		else if(tmp_t->direction == 'e' && tmp_t->posx > 6 && tmp_t->posx < 204)
+			printf("\33[%d;%dH────────\n", tmp_t->posy, tmp_t->posx-6);
+		else {
+			printf("\33[%d;%dH────────\n", tmp_t->posy, 1);
+			printf("\33[%d;%dH────────\n", tmp_t->posy, 197);
+		}
+		printf("\33[54;1H\n");
+		tmp_t = tmp_t->NXT; //passe à l'élément suivant de la liste
+	}
+
 }
+
 
 
 
